@@ -9,7 +9,7 @@ import Container from "@/components/layout/Container";
 import Skeleton from "@/components/ui/Skeleton";
 import Button from "@/components/ui/Button";
 import Sidebar from "@/components/admin/Sidebar";
-import { LogOutIcon } from "@/components/admin/Icons";
+import { LogOutIcon, StoreIcon } from "@/components/admin/Icons";
 
 // Admin shell + client-side role guard (defense in depth — proxy.js fences
 // /admin/* server-side first). All admin pages are client components: auth
@@ -62,6 +62,19 @@ function Topbar() {
         <span className="hidden text-sm text-text-subdued sm:block">
           {auth.user?.username || auth.user?.email || ""}
         </span>
+        {/* New tab so the admin never loses their dashboard place. */}
+        <Button
+          variant="secondary"
+          size="sm"
+          href="/"
+          target="_blank"
+          rel="noopener noreferrer"
+          title="View store"
+          aria-label="View store (opens in a new tab)"
+        >
+          <StoreIcon className="h-4 w-4" />
+          <span className="hidden sm:inline">View store</span>
+        </Button>
         <Button variant="plain" onClick={logout} aria-label="Log out">
           <span className="inline-flex items-center gap-2">
             <LogOutIcon className="h-4 w-4" />

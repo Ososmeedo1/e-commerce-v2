@@ -10,6 +10,7 @@ export default function DeleteConfirmModal({
   onClose,
   title,
   itemName,
+  note = "", // optional extra copy (e.g. cascade semantics)
   pending = false,
   onConfirm,
   confirmLabel = "Delete",
@@ -37,6 +38,7 @@ export default function DeleteConfirmModal({
           <span className="font-semibold">{itemName}</span>
         </p>
       )}
+      {note && <p className="mt-2 text-sm text-text-subdued">{note}</p>}
     </Modal>
   );
 }

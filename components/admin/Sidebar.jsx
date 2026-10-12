@@ -3,14 +3,20 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
+  BrandsIcon,
+  CategoriesIcon,
   CouponsIcon,
   DashboardIcon,
   ProductsIcon,
   ReviewsIcon,
+  SubcategoriesIcon,
 } from "./Icons";
 
 const ITEMS = [
   { href: "/admin", label: "Overview", Icon: DashboardIcon, exact: true },
+  { href: "/admin/categories", label: "Categories", Icon: CategoriesIcon },
+  { href: "/admin/brands", label: "Brands", Icon: BrandsIcon },
+  { href: "/admin/subcategories", label: "Subcategories", Icon: SubcategoriesIcon },
   { href: "/admin/reviews", label: "Reviews", Icon: ReviewsIcon },
   { href: "/admin/products", label: "Products", Icon: ProductsIcon },
   { href: "/admin/coupons", label: "Coupons", Icon: CouponsIcon },

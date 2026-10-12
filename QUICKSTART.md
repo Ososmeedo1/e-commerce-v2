@@ -15,7 +15,7 @@ Pick your backend in `.env.local` (default = prod):
 NEXT_PUBLIC_API_URL=http://localhost:3001
 NEXT_PUBLIC_TOKEN_PREFIX=ososmeedo
 # Prod backend
-# NEXT_PUBLIC_API_URL=http://ecommerce-backend-orpin-five.vercel.app
+# NEXT_PUBLIC_API_URL=https://ecommerce-backend-orpin-five.vercel.app
 # NEXT_PUBLIC_TOKEN_PREFIX=osama
 ```
 

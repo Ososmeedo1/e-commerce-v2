@@ -42,11 +42,68 @@ npm run build
 
 Requires `NEXT_PUBLIC_API_URL` (see `.env.example`).
 
+## Deploying — env vars for your host
+
+Paste this block into your host's env-var UI (Vercel: Project Settings →
+Environment Variables). Set them **BEFORE the build** — every
+`NEXT_PUBLIC_*` var is inlined into the browser bundle at build time, so
+changing a value without rebuilding changes nothing.
+
+Required:
+
+```text
+NEXT_PUBLIC_API_URL=https://ecommerce-backend-orpin-five.vercel.app
+NEXT_PUBLIC_TOKEN_PREFIX=osama
+```
+
+- `NEXT_PUBLIC_API_URL` (required) — backend base URL, no trailing slash.
+  **Must be HTTPS in production**: browsers block `http://` API calls from
+  an `https://` page as mixed content, and this backend 308-redirects
+  `http→https` (redirects also break POST/PATCH/DELETE bodies).
+- `NEXT_PUBLIC_TOKEN_PREFIX` (required) — auth header is
+  `token: <PREFIX><JWT>`. Pairing: prod backend → `osama`, local dev
+  backend → `ososmeedo`. Wrong value = every authed call 401s.
+
+Optional:
+
+```text
+NEXT_PUBLIC_SHOW_DEMO_LOGIN=true
+NEXT_PUBLIC_DEMO_ADMIN_EMAIL=admin@gmail.com
+NEXT_PUBLIC_DEMO_ADMIN_PASSWORD=Admin123#
+NEXT_PUBLIC_CONTACT_URL=
+NEXT_PUBLIC_ENABLE_COUPONS=true
+NEXT_PUBLIC_SERVER_FETCH_TIMEOUT_MS=8000
+```
+
+- `NEXT_PUBLIC_SHOW_DEMO_LOGIN` (optional, default `true`) — one-click
+  demo-admin button on the login page. Set `false` to hide it.
+- `NEXT_PUBLIC_DEMO_ADMIN_EMAIL` / `NEXT_PUBLIC_DEMO_ADMIN_PASSWORD`
+  (optional) — demo account credentials (defaults shown above).
+- `NEXT_PUBLIC_CONTACT_URL` (optional, default empty) — footer link.
+  Empty = no link rendered.
+- `NEXT_PUBLIC_ENABLE_COUPONS` (optional, default `true`) — coupon UI gate.
+- `NEXT_PUBLIC_SERVER_FETCH_TIMEOUT_MS` (optional, default `8000`) —
+  server-side fetch timeout in ms.
+
+Note: the dashboard field is `NEXT_PUBLIC_SERVER_FETCH_TIMEOUT_MS` (with
+prefix) — that is the name `lib/config.js` reads. A bare
+`SERVER_FETCH_TIMEOUT_MS` is ignored.
+
+### Deployment checklist
+
+- [ ] Backend is publicly reachable (`curl -i https://<backend>/brands/` returns 200 JSON from outside your network).
+- [ ] Backend CORS allows the frontend's deployed origin (this backend uses permissive `cors()` — fine here; verify for any other backend).
+- [ ] `NEXT_PUBLIC_API_URL` set to the backend's public **HTTPS** URL (no trailing slash).
+- [ ] `NEXT_PUBLIC_TOKEN_PREFIX` matches the backend's `BEARER_KEY` (`osama` prod / `ososmeedo` local).
+- [ ] Host has been **rebuilt/redeployed** since setting env vars.
+- [ ] Open the deployed site → DevTools → Network → catalog requests return 200 JSON.
+- [ ] No mixed-content errors in DevTools → Console (means the API URL is still `http:` — fix to `https:` and rebuild).
+
 ## Env vars (all `NEXT_PUBLIC_*`, all read in `lib/config.js` only)
 
 | Var | Default | Notes |
 |---|---|---|
-| `NEXT_PUBLIC_API_URL` | `http://localhost:3001` | Local backend on 3001 (must differ from next dev's 3000). Prod (`http://ecommerce-backend-orpin-five.vercel.app`) commented in `.env.example`. |
+| `NEXT_PUBLIC_API_URL` | `http://localhost:3001` | Local backend on 3001 (must differ from next dev's 3000). Prod (`https://ecommerce-backend-orpin-five.vercel.app`) commented in `.env.example`. |
 | `NEXT_PUBLIC_TOKEN_PREFIX` | `osama` | Header is `token: <PREFIX><JWT>`. Dev collection used `ososmeedo` — swap via env. |
 | `NEXT_PUBLIC_ENABLE_COUPONS` | `true` | Coupon UI gate (schema now real). |
 | `NEXT_PUBLIC_ORDER_SHIPPING_FEE` / `NEXT_PUBLIC_ORDER_VAT` | `0` | Policy TBD (docs example shows 30/30). |
@@ -119,7 +176,8 @@ CRUD + single-getters — all in `lib/admin.js` behind an `ADMIN` header.
   bad credentials → `400 "Invalid Credentials"` (not 401). `lib/api.js`
   redirects to `/login?next=...` on 401/403 AND auth-shaped 400s; if the
   backend later switches to 401 the client still works.
-- Prod base URL kept as `http://` per docs; flagged as TODO.
+- Prod base URL is `https://` (verified live: the backend 308-redirects
+  `http→https`; `http://` is blocked as mixed content on HTTPS hosts).
 - `shippingFee` and `VAT` sent as `0`; flagged as TODO.
 - Register always sends `userType: "Buyer"` (backend requires it); age 12–100
   and Egyptian mobile enforced client-side (`lib/validation.js`) to mirror
@@ -170,7 +228,10 @@ in `lib/config.js`).
 `Route "/admin/...": Could not validate that a segment in your UI has
 instant navigation. Dropped segment: app/admin/<page>.js.` This is
 expected: the admin layout guard deliberately skips `{children}` while
-loading or for non-admins. The documented opt-out (`export const
+loading or for non-admins. Every auth-gated `/admin/*` page triggers
+this dev-only warning (overview, reviews, products, coupons, and each
+new Tier-2+ entity page) — the pattern is structural, not page-specific,
+so a new occurrence on a new admin page is not a new problem. The documented opt-out (`export const
 instant = false`) does NOT apply here — route segment config is only
 legal in Server Component modules, and every admin segment is a client
 component (auth lives in localStorage). Attempted once; Next.js rejects
@@ -186,6 +247,15 @@ silence it (that would flash admin UI to non-admins).
 3. Overview shows live counts + new arrivals.
 4. Reviews → moderate. Products → inspect + delete. Coupons → create.
 5. Log out clears both `masar_token` and `masar_role` cookies.
+
+Reviewer shortcut: the login page has a one-click "Try the demo (Admin)"
+button (secondary style below the form; hidden when
+`NEXT_PUBLIC_SHOW_DEMO_LOGIN=false`). It signs in as
+`admin@gmail.com` / `Admin123#` through the normal login flow. The account
+must be created **once per backend** — via the register page (userType =
+Admin) or `NEXT_PUBLIC_API_URL=https://<backend> node
+scripts/seed-demo-admin.mjs`. If the account is missing, the button shows
+exactly that with the fix, instead of the generic login error.
 
 Note the backend allows step 1 because POST /users/register doesn't gate
 Admin — the same finding flagged for the backend owner below. The dev DB
@@ -207,7 +277,11 @@ when done demoing.
 
 ## Known open items
 
+- [BLOCKER — backend owner] Product create is 100% broken server-side: the Joi contract (`products.schema.js`) accepts `discountType` `PERCENTAGE`/`FIXED`, but the Mongoose enum (`DiscountType` in `enum.utils.js` → `product.model.js:49`) only accepts `Percentage`/`Fixed`. Every `POST /products/add` 500s at `Product.create` with `ValidationError: appliedDiscount.type: PERCENTAGE is not a valid enum value`. No frontend value works (title-case fails Joi first). Fix: align one side (e.g. Joi `valid('Percentage','Fixed')` or model enum uppercase). The admin create form sends contract-correct values and works once fixed. Edit flows dodge it by never re-sending an unchanged discount type.
+- [BLOCKER — backend owner] Deployed backend 500s every DB endpoint (`GET /brands/`, `POST /users/login`, `POST /users/register` all 500 with `MongooseError: Operation users.findOne() buffering timed out after 10000ms` in `stack`) — Mongoose has no live connection on the host. Prime suspect: Atlas Network Access allowlist blocking Vercel egress (allow `0.0.0.0/0`); else confirm `MONGO_URI` is on the Production scope and redeploy. Re-verify with `curl -i https://ecommerce-backend-orpin-five.vercel.app/brands/` → 200. See Deployment checklist in Deploying above.
+- [BACKEND OWNER — deployment] The deployed backend needs `CONFIRMATION_SECRET`, `BEARER_KEY`, and `MONGO_URI` in its host env (Production). Missing `CONFIRMATION_SECRET` crashes `POST /users/login` with 500 "Internal Server Error" (`jwt.sign` throws inside `user.controller.js:77`, funneled by `error-handle.middleware.js:8`) — same class of build-time/env footgun as the frontend's `NEXT_PUBLIC_*` vars. Local works only because the backend `.env` has them.
 - [BLOCKER for backend owner] `GET /orders/deliver/:orderId` has no ownership or role check — any authenticated caller can mark any order delivered by id. No admin UI drives it in v1 for exactly this reason.
+- [BACKEND OWNER] Brand delete comment says related products are removed; the code deletes no products (`deleteBrand` only removes the ImageKit folder). Confirm intended behavior.
 - [BACKEND OWNER] `PUT /coupons/update/:couponId` wires `validationMiddleware` before `auth()` — inconsistent with every other coupon route (auth-first). Backend-only note, no client impact.
 
 - [BACKEND OWNER] Review list populate selects `userName`, which does not exist on the User model (field is `username`) — populated `userId`/`productId` often come back as bare ids. The admin reviews UI renders ids defensively; no client fix possible until the backend corrects the select.
@@ -216,7 +290,6 @@ when done demoing.
 - [BACKEND OWNER — production concern] POST /users/register accepts userType: "Admin" from unauthenticated callers with no server-side gate. This portfolio build intentionally exposes the full enum on the register form to demonstrate the contract (see Utils/enum.utils.js); a production storefront must either reject Admin on the public route or move admin provisioning behind an authenticated endpoint.
 - [BLOCKER for backend owner] userType is required and has no default — confirmed via Joi (user.schema.js:12) and Mongoose (user.model.js:28-32). The client sends Buyer explicitly; a future backend default would not change the client, but is worth adding server-side so a raw API call without userType fails loudly rather than silently.
 - Backend marks username/age/phone optional on register; frontend requires them. Confirm which is intended before loosening.
-- Confirm `https` for the prod base URL (docs state `http`; do NOT silently upgrade).
 - Confirm shipping/VAT rule (currently `0`; docs example shows 30/30).
 - Confirm validation `stack` field shapes beyond Joi-style details (parser
   handles string, Joi-array, and message-only; error contract observed live

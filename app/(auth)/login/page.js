@@ -6,7 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/useToast";
 import { safeNext } from "@/lib/auth";
-import { ADMIN_ROLE } from "@/lib/config";
+import { ADMIN_ROLE, DEMO_ADMIN_EMAIL, DEMO_ADMIN_PASSWORD, SHOW_DEMO_LOGIN } from "@/lib/config";
 import { ApiError } from "@/lib/api";
 import { serverFormError } from "@/lib/format";
 import Container from "@/components/layout/Container";
@@ -57,6 +57,34 @@ function LoginInner() {
           ? "Invalid email or password."
           : serverFormError(err, "Login failed. Try again.")
       );
+    } finally {
+      setPending(false);
+    }
+  };
+
+  // One-click reviewer login: fills the demo admin credentials and submits
+  // through the same AuthProvider.login (no duplicated logic). Inputs are
+  // not pre-filled — state is set at click time and the constants (not the
+  // state) are passed to login, so no stale-state race.
+  const submitDemo = async () => {
+    setFormError("");
+    setEmail(DEMO_ADMIN_EMAIL);
+    setPassword(DEMO_ADMIN_PASSWORD);
+    setPending(true);
+    try {
+      const done = await auth.login(DEMO_ADMIN_EMAIL, DEMO_ADMIN_PASSWORD);
+      toast.success("Welcome back");
+      router.replace(done?.user?.userType === ADMIN_ROLE ? "/admin" : next);
+    } catch (err) {
+      // Demo-path credential failure gets its own actionable message (the
+      // normal submit() above keeps "Invalid email or password.").
+      if (err instanceof ApiError && (err.status === 401 || err.status === 400)) {
+        setFormError(
+          "Demo admin account not found on this backend. Register it once via the register page with userType = Admin and these credentials."
+        );
+      } else {
+        setFormError(serverFormError(err, "Login failed. Try again."));
+      }
     } finally {
       setPending(false);
     }
@@ -116,6 +144,22 @@ function LoginInner() {
             Log in
           </Button>
         </form>
+        {SHOW_DEMO_LOGIN && (
+          <div className="mt-4 border-t border-border pt-4">
+            <p className="text-center text-xs text-text-subdued">
+              For reviewers: sign in as the demo admin account.
+            </p>
+            <Button
+              variant="secondary"
+              fullWidth
+              loading={pending}
+              onClick={submitDemo}
+              className="mt-2"
+            >
+              Try the demo (Admin)
+            </Button>
+          </div>
+        )}
         <div className="mt-4 flex items-center justify-between text-sm">
           <Link
             href={`/register?next=${encodeURIComponent(next)}`}

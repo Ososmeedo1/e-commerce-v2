@@ -189,10 +189,17 @@ export default function AdminProductsPage() {
 
   return (
     <div>
-      <h1 className="text-2xl font-bold text-text">Products</h1>
-      <p className="mt-1 text-sm text-text-subdued" role="status">
-        {total} product{total === 1 ? "" : "s"}
-      </p>
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-bold text-text">Products</h1>
+          <p className="mt-1 text-sm text-text-subdued" role="status">
+            {total} product{total === 1 ? "" : "s"}
+          </p>
+        </div>
+        <Button variant="primary" href="/admin/products/new">
+          + New product
+        </Button>
+      </div>
 
       <div className="mt-4 flex flex-col gap-3 md:flex-row md:items-end">
         <div className="md:w-64">
