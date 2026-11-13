@@ -51,6 +51,7 @@ function SearchIcon() {
 
 function AccountMenu({ onNavigate }) {
   const auth = useAuth();
+  const router = useRouter();
   const isAdmin = auth.user?.userType === ADMIN_ROLE;
   const [open, setOpen] = useState(false);
   const wrapRef = useRef(null);
@@ -153,6 +154,7 @@ function AccountMenu({ onNavigate }) {
               setOpen(false);
               auth.logout();
               onNavigate?.();
+              router.replace("/");
             }}
             className={itemCls}
           >
@@ -205,11 +207,6 @@ export default function Navbar() {
     setCartOpen(false);
     setDrawerOpen(true);
   };
-  const openCartDrawerView = () => {
-    setDrawerOpen(false);
-    setCartOpen(true);
-  };
-
   // Opened remotely after successful add-to-cart (see CartDrawer).
   useEffect(() => {
     const open = () => {
@@ -316,23 +313,26 @@ export default function Navbar() {
 
           {/* Cart requires login; admins use the dashboard, not the cart. */}
           {authStatus === "user" && !isAdmin && (
-          <button
-            type="button"
-            onClick={openCartDrawerView}
-            aria-label={cartCount > 0 ? `Open cart, ${cartCount} items` : "Open cart"}
-            aria-haspopup="dialog"
-            className="relative inline-flex h-9 w-9 items-center justify-center rounded-md text-text-subdued hover:bg-surface-subdued hover:text-text"
-          >
-            <CartIcon />
-            {cartCount > 0 && (
-              <span
-                aria-hidden="true"
-                className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-pill bg-primary px-1 text-[10px] font-bold text-white"
-              >
-                {cartCount}
-              </span>
-            )}
-          </button>
+            <Link
+              href="/cart"
+              aria-label={
+                cartCount > 0
+                  ? `Cart, ${cartCount} item${cartCount === 1 ? "" : "s"}`
+                  : "Cart"
+              }
+              aria-current={pathname === "/cart" ? "page" : undefined}
+              className="relative inline-flex h-9 w-9 items-center justify-center rounded-md text-text-subdued hover:bg-surface-subdued hover:text-text"
+            >
+              <CartIcon />
+              {cartCount > 0 && (
+                <span
+                  aria-hidden="true"
+                  className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-pill bg-primary px-1 text-[10px] font-bold text-white"
+                >
+                  {cartCount}
+                </span>
+              )}
+            </Link>
           )}
           <CartDrawer open={cartOpen} onClose={() => setCartOpen(false)} />
 

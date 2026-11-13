@@ -6,6 +6,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 import { ApiError, apiFetch } from "../../lib/api";
@@ -33,11 +34,16 @@ export function AuthProvider({ children }) {
     token: null,
     status: "loading",
   });
+  // Monotonic session generation. Bumped by logout/login so in-flight
+  // profile requests started under an older session cannot restore a stale
+  // user after the session has been cleared or replaced.
+  const sessionRef = useRef(0);
 
   // Mount-time session restore: sync external system (localStorage) into
   // state exactly once. Suppression is intentional — this is the sanctioned
   // "sync external store on mount" case, not derived state.
   useEffect(() => {
+    const session = sessionRef.current;
     const stored = getToken();
     if (!stored) {
       // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -47,7 +53,7 @@ export function AuthProvider({ children }) {
     let cancelled = false;
     apiFetch(getProfile(), { auth: true })
       .then((res) => {
-        if (cancelled) return;
+        if (cancelled || sessionRef.current !== session) return;
         const restored = (res && res.data && res.data.user) || null;
         // Re-mirror the role: a refreshed tab must fence /admin like a login.
         setToken(stored, restored?.userType);
@@ -58,7 +64,7 @@ export function AuthProvider({ children }) {
         });
       })
       .catch(() => {
-        if (cancelled) return;
+        if (cancelled || sessionRef.current !== session) return;
         clearToken();
         setState({ user: null, token: null, status: "guest" });
       });
@@ -68,6 +74,7 @@ export function AuthProvider({ children }) {
   }, []);
 
   const login = useCallback(async (email, password) => {
+    const session = ++sessionRef.current;
     const res = await apiFetch(loginUser(), {
       method: "POST",
       body: { email, password },
@@ -79,6 +86,10 @@ export function AuthProvider({ children }) {
     }
     setToken(jwt);
     const me = await apiFetch(getProfile(), { auth: true });
+    if (sessionRef.current !== session) {
+      // Logout (or a newer login) started while this profile was in flight.
+      throw new ApiError(409, "Login was superseded by a session change.");
+    }
     const user = (me && me.data && me.data.user) || null;
     // Role cookie only after the profile proves who this token belongs to.
     // Profile failure throws above → no role cookie is written.
@@ -103,7 +114,9 @@ export function AuthProvider({ children }) {
 
   const logout = useCallback(() => {
     // Client-side only — no backend logout endpoint (docs/AUTH_FLOW.md §2.6).
-    // Callers (Navbar Phase 2, account pages Phase 7) handle redirect/toast.
+    // Invalidate any in-flight profile/refresh request before clearing so a
+    // late response cannot restore the user we are logging out.
+    sessionRef.current += 1;
     clearToken();
     try {
       window.sessionStorage.removeItem(OTP_TOKEN_KEY);
@@ -115,12 +128,14 @@ export function AuthProvider({ children }) {
   }, []);
 
   const refresh = useCallback(async () => {
+    const session = sessionRef.current;
     const stored = getToken();
     if (!stored) {
       setState({ user: null, token: null, status: "guest" });
       return null;
     }
     const me = await apiFetch(getProfile(), { auth: true });
+    if (sessionRef.current !== session) return null;
     const user = (me && me.data && me.data.user) || null;
     setState({ user, token: stored, status: "user" });
     return user;

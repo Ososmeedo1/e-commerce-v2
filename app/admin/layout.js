@@ -51,7 +51,7 @@ function Topbar() {
   const router = useRouter();
   const logout = () => {
     auth.logout();
-    router.replace("/login");
+    router.replace("/");
   };
   return (
     <div className="flex h-14 items-center gap-3 border-b border-border bg-surface px-4 sm:px-6">

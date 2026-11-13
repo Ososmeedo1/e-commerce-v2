@@ -299,22 +299,24 @@ export default function ProductDetailPage() {
             </Badge>
           </div>
           <div className="mt-4 flex flex-col gap-2">
-            <QuantityStepper
-              value={qty}
-              min={1}
-              max={product.stock}
-              onChange={setQty}
-              disabled={!inStock || cartAction.isPending(product._id)}
-            />
-            <Button
-              variant="primary"
-              fullWidth
-              disabled={!inStock || cartAction.isPending(product._id)}
-              loading={cartAction.isPending(product._id)}
-              onClick={onAddToCart}
-            >
-              Add to cart
-            </Button>
+            <div className="flex flex-wrap items-center gap-2">
+              <QuantityStepper
+                value={qty}
+                min={1}
+                max={product.stock}
+                onChange={setQty}
+                disabled={!inStock || cartAction.isPending(product._id)}
+              />
+              <Button
+                variant="primary"
+                className="min-w-0 flex-1"
+                disabled={!inStock || cartAction.isPending(product._id)}
+                loading={cartAction.isPending(product._id)}
+                onClick={onAddToCart}
+              >
+                Add to cart
+              </Button>
+            </div>
             {hasBought === false ? (
               <>
                 <Button variant="secondary" fullWidth disabled>
