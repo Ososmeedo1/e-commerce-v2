@@ -24,6 +24,7 @@ function LoginInner() {
   const next = safeNext(rawNext, "/");
   const justRegistered = searchParams.get("registered") === "1";
   const justReset = searchParams.get("reset") === "1";
+  const justChangedPassword = searchParams.get("passwordChanged") === "1";
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -113,7 +114,12 @@ function LoginInner() {
         )}
         {justReset && (
           <p role="status" className="mt-3 rounded-md bg-success-bg px-3 py-2 text-sm text-success">
-            Password reset — please sign in.
+            Password reset — sign in with your new password.
+          </p>
+        )}
+        {justChangedPassword && (
+          <p role="status" className="mt-3 rounded-md bg-success-bg px-3 py-2 text-sm text-success">
+            Password changed — your previous session ended. Sign in with your new password.
           </p>
         )}
         <form onSubmit={submit} className="mt-4 space-y-3" noValidate>

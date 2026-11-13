@@ -38,6 +38,18 @@ function lineId(line) {
   return typeof pid === "string" ? pid : pid?._id || null;
 }
 
+// The backend models "no cart yet" as `404 No cart exists`. That is a valid
+// empty state, not a failed request. Keep the match narrow so other 404s are
+// still surfaced as errors.
+const NO_CART_MESSAGE = /^no cart exists\.?$/i;
+
+function isEmptyCartError(error) {
+  return (
+    error?.status === 404 &&
+    NO_CART_MESSAGE.test(String(error?.message || "").trim())
+  );
+}
+
 export function CartProvider({ children }) {
   const { status: authStatus } = useAuth();
   const [cart, setCart] = useState(null);
@@ -84,13 +96,31 @@ export function CartProvider({ children }) {
       }
       try {
         const res = await apiFetch(getCart(), { auth: true });
-        const lines = Array.isArray(res?.data?.products) ? res.data.products : [];
-        setCart(res?.data || null);
+        const cartData = res?.data;
+        // Validate instead of defaulting to []: a malformed/empty payload is
+        // an API error, not proof that the cart is empty.
+        if (
+          !cartData ||
+          typeof cartData !== "object" ||
+          !Array.isArray(cartData.products)
+        ) {
+          throw new Error("Cart response has an unexpected shape");
+        }
+        const lines = cartData.products;
+        setCart(cartData);
         setItems(await resolveItems(lines));
         setStatus("ready");
         if (!quiet) setError(null);
         return { ok: true };
       } catch (err) {
+        // A user with no cart is a successful empty state, not a load error.
+        if (isEmptyCartError(err)) {
+          setCart(null);
+          setItems([]);
+          setStatus("ready");
+          setError(null);
+          return { ok: true };
+        }
         // 401/403 never settles here for long — apiFetch clears the session
         // and redirects to /login?next=<current> first.
         if (!quiet) {

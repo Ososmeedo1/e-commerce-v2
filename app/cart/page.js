@@ -44,9 +44,9 @@ export default function CartPage() {
       )}
       {status === "ready" && items.length === 0 && (
         <EmptyState
-          title="Your cart is empty"
+          title="Cart is empty"
           description="Browse products to get started."
-          action={<Button href="/products">Browse products</Button>}
+          action={<Button href="/products">Continue shopping</Button>}
         />
       )}
       {status === "ready" && items.length > 0 && (

@@ -311,8 +311,8 @@ export default function Navbar() {
 
           <ThemeToggle />
 
-          {/* Cart requires login; admins use the dashboard, not the cart. */}
-          {authStatus === "user" && !isAdmin && (
+          {/* Cart requires login and is available to every role, including admins. */}
+          {authStatus === "user" && (
             <Link
               href="/cart"
               aria-label={

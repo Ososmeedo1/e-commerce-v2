@@ -129,7 +129,8 @@ prefix) — that is the name `lib/config.js` reads. A bare
   (`findCouponByCode`, `couponUsability`, `couponDiscountFor`).
 - `lib/catalog.js` — sort options shared by server + client.
 - `lib/validation.js` — central client validation (password policy, age 12–100,
-  Egyptian mobile) shared by register, reset-password, and profile edit.
+  Egyptian mobile) shared by register, reset-password, profile edit, and
+  change-password.
 - `proxy.js` — route fence (`/products/:id`, `/cart/*`, `/checkout/*`,
   `/orders/*`, `/account/*`, `/login`, `/register`); cookie name from config.
 
@@ -185,6 +186,9 @@ CRUD + single-getters — all in `lib/admin.js` behind an `ADMIN` header.
   to the server message.
 - Profile edit sends only changed fields, whitelisted to username/phone/age
   (subset of the update schema); empty/unchanged values are dropped.
+- Profile also exposes a Change password form (`PUT /users/change-password`).
+  On success the stale local session is cleared and the user is sent to
+  `/login?passwordChanged=1` because the backend invalidates old JWTs.
 - Checkout sends a free-text `address` string (backend also accepts
   `addressId`, unused by design); saved addresses quick-fill the field.
 - `POST /orders/add` stores `couponId`, it does not echo `couponCode` — the

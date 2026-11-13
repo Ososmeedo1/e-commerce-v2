@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { apiFetch } from "@/lib/api";
 import { deleteAccount, getProfile, updateAccount } from "@/lib/endpoints";
@@ -18,6 +17,7 @@ import Modal from "@/components/ui/Modal";
 import EmptyState from "@/components/ui/EmptyState";
 import ErrorState from "@/components/ui/ErrorState";
 import Skeleton from "@/components/ui/Skeleton";
+import ChangePasswordCard from "@/components/account/ChangePasswordCard";
 
 function composeAddress(address) {
   if (!address || typeof address !== "object") return "";
@@ -280,11 +280,8 @@ export default function AccountProfilePage() {
               />
             </div>
             <p className="mt-3 text-xs text-text-subdued">
-              To change email or password, use the{" "}
-              <Link href="/forgot-password" className="text-primary hover:underline">
-                password reset flow
-              </Link>
-              .
+              To change your email, contact support. Use the Change password
+              section below to update your password.
             </p>
             {formError && (
               <p role="alert" className="mt-3 text-sm text-danger">
@@ -307,6 +304,8 @@ export default function AccountProfilePage() {
           </form>
         </Card>
       )}
+
+      <ChangePasswordCard />
 
       {/* Irreversible delete: type-to-confirm (username) over plain
           Yes/Cancel. Destructive styling comes from the modal's

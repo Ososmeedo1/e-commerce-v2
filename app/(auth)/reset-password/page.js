@@ -37,6 +37,7 @@ function ResetInner() {
 
   const submit = async (e) => {
     e.preventDefault();
+    if (pending) return;
     // Password policy shared with register (lib/validation.js, Q12).
     const pwError = passwordError(password);
     if (pwError) {
@@ -54,12 +55,16 @@ function ResetInner() {
         method: "POST",
         body: { newPassword: password, resetToken },
       });
+      // The reset succeeded. Clear the one-time flow keys, then send the user
+      // to the login page; this flow never signs the user in automatically.
       window.sessionStorage.removeItem(OTP_TOKEN_KEY);
       window.sessionStorage.removeItem(RESET_TOKEN_KEY);
-      toast.success("Password reset — please sign in");
+      setPassword("");
+      setConfirm("");
+      toast.success("Password reset. Please log in with your new password.");
       router.replace("/login?reset=1");
     } catch (err) {
-      // TODO Q15: confirm backend error shape for expired reset tokens.
+      // Failed attempts stay on this page so the user can retry.
       setFormError(serverFormError(err, "Could not reset the password. Try again."));
     } finally {
       setPending(false);
