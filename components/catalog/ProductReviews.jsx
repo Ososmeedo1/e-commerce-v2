@@ -13,11 +13,24 @@ import EmptyState from "../ui/EmptyState";
 import ErrorState from "../ui/ErrorState";
 import Skeleton from "../ui/Skeleton";
 
-const PAGE_LIMIT = 10;
+// Backend path param is a MongoDB ObjectId. The reviews route does not run a
+// Joi check on it, so a malformed value reaches Mongoose and becomes a 500.
+// Guard before fetching instead of blaming the server for a broken link.
+const OBJECT_ID_RE = /^[a-f0-9]{24}$/i;
+const AUTH_ERROR_PATTERN = /not logged in|unauthoriz|user not found|jwt|bearer|invalid payload/i;
 
-// Moderation-aware status badges (business rule: only APPROVED is public).
+function isAuthError(err) {
+  return (
+    err?.status === 401 ||
+    err?.status === 403 ||
+    (err?.status === 400 && AUTH_ERROR_PATTERN.test(String(err?.message || "")))
+  );
+}
+
+// Moderation-aware status badges (business rule: approved/accepted reviews
+// are public and need no label; pending/rejected reviews are flagged).
 function ReviewStatusBadge({ reviewStatus }) {
-  if (!reviewStatus || reviewStatus === "approved") return null;
+  if (!reviewStatus || reviewStatus === "approved" || reviewStatus === "accepted") return null;
   if (reviewStatus === "pending") {
     return <Badge variant="warning">Pending approval</Badge>;
   }
@@ -26,9 +39,12 @@ function ReviewStatusBadge({ reviewStatus }) {
   }
   return <Badge variant="subdued">{reviewStatus}</Badge>;
 }
+
 function ReviewItem({ review }) {
+  // GET /reviews/list/:productId populates userId with {username,email}.
   const author =
-    (review.userId && review.userId.email) || "Verified buyer";
+    (review.userId && (review.userId.username || review.userId.email)) ||
+    "Verified buyer";
   return (
     <li className="rounded-md border border-border bg-surface p-4 shadow-sm">
       <div className="flex flex-wrap items-center gap-2">
@@ -36,7 +52,9 @@ function ReviewItem({ review }) {
         <RatingStars rating={review.reviewRating} />
         <ReviewStatusBadge reviewStatus={review.reviewStatus} />
       </div>
-      <p className="mt-2 break-words text-sm text-text">{review.reviewBody}</p>
+      {review.reviewBody && (
+        <p className="mt-2 break-words text-sm text-text">{review.reviewBody}</p>
+      )}
       {review.createdAt && (
         <p className="mt-1 text-xs text-text-subdued">{formatDate(review.createdAt)}</p>
       )}
@@ -48,79 +66,80 @@ export default function ProductReviews({ productId, currentPath, onTotal = null,
   const { requireAuth } = useAuthGate();
   const { status: authStatus, user } = useAuth();
   const [items, setItems] = useState([]);
-  const [page, setPage] = useState(1);
   const [total, setTotal] = useState(null);
   const [status, setStatus] = useState("loading");
-  const [loadingMore, setLoadingMore] = useState(false);
-  // Pending reviews authored by the current user, accumulated across loaded
-  // pages (only non-zero if the backend returns pending entries to authors).
+  // Pending reviews authored by the current user, so the detail-page header
+  // can show "N pending" without exaggerating the public review count.
   const pendingMineRef = useRef(0);
+  const validProductId = typeof productId === "string" && OBJECT_ID_RE.test(productId);
 
-  // Route failures: 401/403 (backend gates listing for buyers) → subdued
-  // moderated notice, never the error state. Anything else → error + retry.
-  const failWith = (err) => {
-    if (err?.status === 401 || err?.status === 403) setStatus("moderated");
-    else setStatus("error");
-  };
+  const load = useCallback(async () => {
+    const res = await apiFetch(listProductReviews(productId), {
+      auth: true,
+      // Decorative section: auth failures must render the moderated notice
+      // below, never clear the session + redirect (see lib/api.js).
+      noRedirect: true,
+    });
+    // Any 2xx that yields no array is an EMPTY result, never an error.
+    return Array.isArray(res?.data) ? res.data : [];
+  }, [productId]);
 
-  const load = useCallback(
-    async (pageToLoad, append) => {
-      const res = await apiFetch(listProductReviews({ productId, page: pageToLoad, limit: PAGE_LIMIT }), {
-        auth: true,
-        // Decorative section: auth failures must render the moderated notice
-        // below, never clear the session + redirect (see lib/api.js).
-        noRedirect: true,
-      });
-      // Any 2xx that yields zero items — [] / null / missing data — is an
-      // EMPTY result, never an error.
-      const data = Array.isArray(res?.data) ? res.data : [];
-      if (append) setItems((prev) => [...prev, ...data]);
-      else setItems(data);
-      const nextTotal = typeof res?.total === "number" ? res.total : null;
-      setTotal(nextTotal);
+  const applyLoaded = useCallback(
+    (data) => {
+      setItems(data);
+      // The current endpoint returns the full list, with no `total` field.
+      setTotal(data.length);
       const mine = data.filter(
-        (r) => r?.reviewStatus === "pending" && user?.email && r?.userId?.email === user.email
+        (r) =>
+          r?.reviewStatus === "pending" &&
+          user?.email &&
+          r?.userId?.email === user.email
       ).length;
-      if (append) pendingMineRef.current += mine;
-      else pendingMineRef.current = mine;
-      if (onTotal) onTotal(nextTotal, pendingMineRef.current);
-      setPage(pageToLoad);
+      pendingMineRef.current = mine;
+      if (onTotal) onTotal(data.length, mine);
+      setStatus("ok");
     },
-    [productId, onTotal, user]
+    [onTotal, user]
   );
 
-  // refreshKey lets the parent reload page 1 after a new review lands.
-  // Guests never fetch: the section renders a sign-in notice instead
-  // (no network call, derived during render below). Buyers fetch and land
-  // on the moderated notice when the backend gates listing (see failWith).
+  const applyFailure = useCallback(
+    (err) => {
+      // Backend answers 404 {"message":"No Reviews yet"} for an empty list.
+      if (err?.status === 404) {
+        setItems([]);
+        setTotal(0);
+        pendingMineRef.current = 0;
+        if (onTotal) onTotal(0, 0);
+        setStatus("ok");
+        return;
+      }
+      if (isAuthError(err)) setStatus("moderated");
+      else setStatus("error");
+    },
+    [onTotal]
+  );
+
+  // refreshKey lets the parent reload after a new review lands.
+  // Guests never fetch: the section renders a sign-in notice instead.
   useEffect(() => {
-    if (authStatus !== "user") return undefined;
+    if (authStatus !== "user" || !validProductId) return undefined;
     let cancelled = false;
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- mount fetch (sanctioned; resolutions are async)
-    load(1, false)
-      .then(() => {
-        if (!cancelled) setStatus("ok");
+    load()
+      .then((data) => {
+        if (!cancelled) applyLoaded(data);
       })
       .catch((err) => {
-        if (!cancelled) failWith(err);
+        if (!cancelled) applyFailure(err);
       });
     return () => {
       cancelled = true;
     };
-  }, [authStatus, load, refreshKey]);
+  }, [authStatus, validProductId, load, applyLoaded, applyFailure, refreshKey]);
 
-  const loadMore = async () => {
-    setLoadingMore(true);
-    try {
-      await load(page + 1, true);
-    } catch {
-      // Keep existing items; a retry is available via the button staying put.
-    } finally {
-      setLoadingMore(false);
-    }
+  const retry = () => {
+    setStatus("loading");
+    load().then(applyLoaded).catch(applyFailure);
   };
-
-  const hasMore = total === null ? items.length >= page * PAGE_LIMIT : items.length < total;
 
   const gateReview = (e) => {
     e.preventDefault();
@@ -139,6 +158,20 @@ export default function ProductReviews({ productId, currentPath, onTotal = null,
         <EmptyState
           title="Sign in to see reviews"
           description="Reviews are shared with members. Sign in to read them — you can write your own after a purchase."
+        />
+      </section>
+    );
+  }
+
+  if (!validProductId) {
+    return (
+      <section aria-labelledby="reviews-heading" className="mt-8">
+        <h2 id="reviews-heading" className="text-lg font-semibold text-text">
+          Reviews
+        </h2>
+        <EmptyState
+          title="Reviews unavailable"
+          description="This product link is invalid, so reviews can't be loaded."
         />
       </section>
     );
@@ -181,12 +214,7 @@ export default function ProductReviews({ productId, currentPath, onTotal = null,
         <ErrorState
           title="Could not load reviews"
           description="Try again in a moment."
-          onRetry={() => {
-            setStatus("loading");
-            load(1, false)
-              .then(() => setStatus("ok"))
-              .catch((err) => failWith(err));
-          }}
+          onRetry={retry}
         />
       </section>
     );
@@ -200,7 +228,7 @@ export default function ProductReviews({ productId, currentPath, onTotal = null,
       {items.length === 0 ? (
         <EmptyState
           title="No reviews yet"
-          description="Be the first to review this product. Reviews appear here once approved."
+          description="Be the first to review this product."
           action={
             canReview === false ? (
               <div>
@@ -221,20 +249,11 @@ export default function ProductReviews({ productId, currentPath, onTotal = null,
           }
         />
       ) : (
-        <>
-          <ul className="mt-3 space-y-3">
-            {items.map((r) => (
-              <ReviewItem key={r._id} review={r} />
-            ))}
-          </ul>
-          {hasMore && (
-            <div className="mt-4 flex justify-center">
-              <Button variant="secondary" onClick={loadMore} loading={loadingMore}>
-                Load more
-              </Button>
-            </div>
-          )}
-        </>
+        <ul className="mt-3 space-y-3">
+          {items.map((r) => (
+            <ReviewItem key={r._id} review={r} />
+          ))}
+        </ul>
       )}
     </section>
   );
