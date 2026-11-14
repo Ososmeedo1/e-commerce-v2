@@ -2,10 +2,9 @@
 
 import { Suspense, useEffect, useState } from "react";
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { useAuth } from "@/hooks/useAuth";
-import { useToast } from "@/hooks/useToast";
-import { safeNext } from "@/lib/auth";
+import { navigateAfterAuth, safeNext, setToken } from "@/lib/auth";
 import { serverFormError } from "@/lib/format";
 import { ageError, DEFAULT_USER_TYPE, passwordError, phoneError, USER_TYPES, userTypeError } from "@/lib/validation";
 import { ADMIN_ROLE } from "@/lib/config";
@@ -35,8 +34,6 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 function RegisterInner() {
   const auth = useAuth();
-  const toast = useToast();
-  const router = useRouter();
   const searchParams = useSearchParams();
   const next = safeNext(searchParams.get("next"), "/");
 
@@ -46,8 +43,11 @@ function RegisterInner() {
 
   useEffect(() => {
     if (auth.status !== "user") return;
-    router.replace(auth.user?.userType === ADMIN_ROLE ? "/admin" : next);
-  }, [auth.status, auth.user, next, router]);
+    // Repair a missing cookie mirror before the full document load, which also
+    // bypasses any cached client-router redirect (see login page).
+    if (auth.token) setToken(auth.token, auth.user?.userType);
+    navigateAfterAuth(auth.user?.userType === ADMIN_ROLE ? "/admin" : next);
+  }, [auth.status, auth.token, auth.user, next]);
 
   const set = (key) => (e) => {
     setValues((v) => ({ ...v, [key]: e.target.value }));
@@ -137,15 +137,11 @@ function RegisterInner() {
         addressLabel: values.addressLabel.trim() || "home",
       });
       if (done.needsLogin) {
-        router.replace(
-          `/login?next=${encodeURIComponent(next)}&registered=1`
-        );
+        navigateAfterAuth(`/login?next=${encodeURIComponent(next)}&registered=1`);
       } else if (done?.user?.userType === ADMIN_ROLE) {
-        toast.success("Account created");
-        router.replace("/admin");
+        navigateAfterAuth("/admin");
       } else {
-        toast.success("Account created");
-        router.replace(next);
+        navigateAfterAuth(next);
       }
     } catch (err) {
       // Backend 4xx messages (e.g. "Email already exists", field details)

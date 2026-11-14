@@ -137,6 +137,9 @@ export function AuthProvider({ children }) {
     const me = await apiFetch(getProfile(), { auth: true });
     if (sessionRef.current !== session) return null;
     const user = (me && me.data && me.data.user) || null;
+    // Re-mirror cookie + role on every successful profile refresh. The profile
+    // is the source of truth, so this also repairs a missing/stale cookie mirror.
+    setToken(stored, user?.userType);
     setState({ user, token: stored, status: "user" });
     return user;
   }, []);

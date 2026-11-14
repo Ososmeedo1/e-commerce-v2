@@ -2,10 +2,9 @@
 
 import { Suspense, useEffect, useState } from "react";
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { useAuth } from "@/hooks/useAuth";
-import { useToast } from "@/hooks/useToast";
-import { safeNext } from "@/lib/auth";
+import { navigateAfterAuth, safeNext, setToken } from "@/lib/auth";
 import { ADMIN_ROLE, DEMO_ADMIN_EMAIL, DEMO_ADMIN_PASSWORD, SHOW_DEMO_LOGIN } from "@/lib/config";
 import { ApiError } from "@/lib/api";
 import { serverFormError } from "@/lib/format";
@@ -17,8 +16,6 @@ import Skeleton from "@/components/ui/Skeleton";
 
 function LoginInner() {
   const auth = useAuth();
-  const toast = useToast();
-  const router = useRouter();
   const searchParams = useSearchParams();
   const rawNext = searchParams.get("next");
   const next = safeNext(rawNext, "/");
@@ -33,10 +30,15 @@ function LoginInner() {
 
   // Logged-in visitors don't need the form (docs/AUTH_FLOW.md §3).
   // Admins always land on the dashboard, even with ?next= (no buyer cart).
+  // Re-mirror the cookie before a full document load: if proxy.js bounced a
+  // valid session here because the cookie was missing, the server needs the
+  // repaired cookie. navigateAfterAuth() also bypasses the client router's
+  // cached redirect for the target route, which router.replace() would reuse.
   useEffect(() => {
     if (auth.status !== "user") return;
-    router.replace(auth.user?.userType === ADMIN_ROLE ? "/admin" : next);
-  }, [auth.status, auth.user, next, router]);
+    if (auth.token) setToken(auth.token, auth.user?.userType);
+    navigateAfterAuth(auth.user?.userType === ADMIN_ROLE ? "/admin" : next);
+  }, [auth.status, auth.token, auth.user, next]);
 
   const submit = async (e) => {
     e.preventDefault();
@@ -48,8 +50,7 @@ function LoginInner() {
     setPending(true);
     try {
       const done = await auth.login(email.trim(), password);
-      toast.success("Welcome back");
-      router.replace(done?.user?.userType === ADMIN_ROLE ? "/admin" : next);
+      navigateAfterAuth(done?.user?.userType === ADMIN_ROLE ? "/admin" : next);
     } catch (err) {
       // TODO Q15: confirm backend error shape/status for bad credentials.
       // Observed live: 400 {"message":"Invalid Credentials"} (not 401).
@@ -74,8 +75,7 @@ function LoginInner() {
     setPending(true);
     try {
       const done = await auth.login(DEMO_ADMIN_EMAIL, DEMO_ADMIN_PASSWORD);
-      toast.success("Welcome back");
-      router.replace(done?.user?.userType === ADMIN_ROLE ? "/admin" : next);
+      navigateAfterAuth(done?.user?.userType === ADMIN_ROLE ? "/admin" : next);
     } catch (err) {
       // Demo-path credential failure gets its own actionable message (the
       // normal submit() above keeps "Invalid email or password.").
